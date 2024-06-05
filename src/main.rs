@@ -80,6 +80,19 @@ impl Calculator for CalculatorService {
     }
 }
 
+// Interceptors (middleware)
+use tonic::metadata::MetadataValue;
+use tonic::{Request, Status};
+
+fn check_auth(req: Request<()>) -> Result<Request<()>, Status> {
+    let token: MetadataValue<_> = "Bearer some-secret-token".parse().unwrap();
+
+    match req.metadata().get("authorization") {
+        Some(t) if token == t => Ok(req),
+        _ => Err(Status::unauthenticated("No valid auth token")),
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:50051".parse()?;
@@ -98,8 +111,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Server::builder()
         .add_service(service)
-        .add_service(CalculatorServer::new(calc))
-        .add_service(AdminServer::new(admin))
+        .add_service(CalculatorServer::with_interceptor(calc, check_auth))
+        .add_service(AdminServer::with_interceptor(admin, check_auth))
         .serve(addr)
         .await?;
 
